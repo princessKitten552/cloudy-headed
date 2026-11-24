@@ -2,7 +2,7 @@
 
 Clone auto-hébergé de Steam Cloud pour les sauvegardes de jeux (serveur FastAPI + client Tauri).
 
-> État : **phase 2 — serveur FastAPI + Docker**. Rétention et client viennent dans les phases suivantes.
+> État : **phase 3 — serveur FastAPI + Docker + rétention des versions**. Le client vient dans les phases suivantes.
 
 ## Serveur : lancer en local
 
@@ -63,5 +63,13 @@ pytest
 | GET | `/games/{game_id}/download?version=latest\|<id>` | archive zip (en-tête `X-Content-SHA256`) |
 | DELETE | `/games/{game_id}/versions/{version_id}` | supprime une version |
 | GET/PUT | `/settings` | `{"max_versions": n}` |
+
+## Rétention des versions
+
+Après chaque upload réussi, le serveur ne garde que les `max_versions` versions les plus récentes **du jeu concerné** et supprime les plus anciennes (base de données et fichiers).
+
+- La valeur se règle via `PUT /settings` (partagée par toutes les machines). `SAVESYNC_DEFAULT_MAX_VERSIONS` ne sert que tant qu'aucune valeur n'a été enregistrée.
+- Modifier la valeur ne supprime rien immédiatement : l'excédent d'un jeu est purgé lors de son prochain upload.
+- Un upload refusé (hash incorrect, zip invalide) ne supprime jamais rien, et une erreur de purge n'annule pas un upload déjà enregistré (elle est journalisée).
 
 Les erreurs ont la forme `{"detail": {"code": "...", "message": "..."}}`.

@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import Game, Version, utcnow
 from app.deps import DbSession, GameId, SettingsDep, StorageDep, require_token
 from app.errors import api_error
+from app.retention import purge_excess_versions
 from app.schemas import GameOut, VersionOut, game_out, version_out
+from app.settings_store import read_max_versions
 from app.storage import StorageError, UploadTooLarge
 from app.validation import validate_machine
 
@@ -53,6 +55,19 @@ def _get_or_create_game(db: Session, game_id: str, steam_app_id: int | None) -> 
     if steam_app_id is not None and game.steam_app_id != steam_app_id:
         game.steam_app_id = steam_app_id
     return game
+
+
+def _apply_retention(db: Session, storage, settings, game_pk: int, game_id: str) -> None:
+    """Purge old versions after a successful upload. Never fails the upload itself."""
+    try:
+        keep = read_max_versions(db, settings.default_max_versions)
+        purged = purge_excess_versions(db, storage, game_pk, keep)
+    except Exception:
+        db.rollback()
+        log.exception("Retention purge failed for %r (the upload itself succeeded)", game_id)
+        return
+    if purged:
+        log.info("Retention (keep %d): purged %d old version(s) of %r: %s", keep, len(purged), game_id, purged)
 
 
 @router.get("/games", response_model=list[GameOut])
@@ -132,7 +147,9 @@ def upload_version(
         stored.path.unlink(missing_ok=True)
 
     log.info("Stored version %d of %r (%d bytes) from %s", version.id, game_id, stored.size, machine)
-    return version_out(version, game_id)
+    result = version_out(version, game_id)
+    _apply_retention(db, storage, settings, game.id, game_id)
+    return result
 
 
 @router.get("/games/{game_id}/versions", response_model=list[VersionOut])
