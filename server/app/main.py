@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
 from app import __version__
-from app.config import Settings
+from app.config import ConfigError, Settings
 from app.db import Base, create_db_engine
 from app.middleware import MaxBodySizeMiddleware
 from app.routers import games, health
@@ -34,9 +34,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging()
     settings = settings or Settings.from_env()
 
-    settings.db_dir.mkdir(parents=True, exist_ok=True)
     storage = Storage(settings)
-    storage.init()
+    try:
+        settings.db_dir.mkdir(parents=True, exist_ok=True)
+        storage.init()
+    except PermissionError as exc:
+        raise ConfigError(
+            f"Cannot write to {exc.filename!r}. The data and db directories must be writable by "
+            "the user running the server (with Docker bind mounts: create them beforehand and "
+            "make PUID/PGID match their owner)."
+        ) from exc
     engine = create_db_engine(settings.db_path)
     Base.metadata.create_all(engine)
 

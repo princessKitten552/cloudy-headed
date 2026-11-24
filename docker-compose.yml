@@ -1,0 +1,24 @@
+services:
+  savesync:
+    build: ./server
+    image: savesync-server:latest
+    container_name: savesync
+    restart: unless-stopped
+    # Run as the owner of ./data and ./db so the bind mounts are writable (see .env.example).
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      SAVESYNC_API_TOKEN: "${SAVESYNC_API_TOKEN:?Set SAVESYNC_API_TOKEN in .env (see .env.example)}"
+      SAVESYNC_MAX_UPLOAD_MB: "${SAVESYNC_MAX_UPLOAD_MB:-1024}"
+      SAVESYNC_DEFAULT_MAX_VERSIONS: "${SAVESYNC_DEFAULT_MAX_VERSIONS:-10}"
+      # IP of the machine running Traefik: lets the logs show the real client IP.
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
+    ports:
+      # Point Traefik at http://<this-host-ip>:8000. Set SAVESYNC_BIND to a LAN IP to limit exposure.
+      - "${SAVESYNC_BIND:-0.0.0.0}:${SAVESYNC_PORT:-8000}:8000"
+    volumes:
+      - ./data:/data
+      - ./db:/db
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

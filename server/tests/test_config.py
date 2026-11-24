@@ -26,3 +26,15 @@ def test_defaults_and_overrides():
 def test_invalid_integer_rejected():
     with pytest.raises(ConfigError):
         Settings.from_env({"SAVESYNC_API_TOKEN": "a" * 32, "SAVESYNC_MAX_UPLOAD_MB": "abc"})
+
+
+def test_unwritable_data_dir_gives_clear_error(settings, monkeypatch):
+    from app.main import create_app
+    from app.storage import Storage
+
+    def denied(self):
+        raise PermissionError(13, "Permission denied", "/data/games")
+
+    monkeypatch.setattr(Storage, "init", denied)
+    with pytest.raises(ConfigError, match="PUID/PGID"):
+        create_app(settings)
