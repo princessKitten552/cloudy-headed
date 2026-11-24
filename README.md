@@ -1,10 +1,12 @@
-# SaveSync
+# Cloudy Headed
 
-Clone auto-hébergé de Steam Cloud pour les sauvegardes de jeux (serveur FastAPI + client Tauri).
+Self-hosted clone of Steam Cloud service to save your progresions in each game (serveur FastAPI + client Tauri).
 
 > État : **phase 3 — serveur FastAPI + Docker + rétention des versions**. Le client vient dans les phases suivantes.
 
-## Serveur : lancer en local
+>Step 3: **FastAPI server + Docker + history**. The client is coming soon.
+
+## Server on local host
 
 ```bash
 cd server
@@ -16,7 +18,7 @@ export SAVESYNC_DATA_DIR=/tmp/savesync/data SAVESYNC_DB_DIR=/tmp/savesync/db
 uvicorn app.main:create_app --factory --port 8000
 ```
 
-## Serveur : Docker (recommandé)
+## Server on docker (recomended)
 
 ```bash
 cp .env.example .env
@@ -30,20 +32,22 @@ curl http://127.0.0.1:8000/health
 docker compose logs -f savesync
 ```
 
-- Les archives sont dans `./data`, la base SQLite dans `./db` (bind mounts : ce sont de simples dossiers à sauvegarder).
-- **Traefik** (autre serveur) : faire pointer le domaine vers `http://IP_DU_HOMELAB:8000`. Le HTTPS est géré par Traefik.
-- Le port 8000 est en HTTP clair : limiter son accès à l'IP du serveur Traefik (pare-feu), ou définir `SAVESYNC_BIND` sur une IP du LAN.
-- Si le conteneur s'arrête avec « Cannot write to … » : `./data` ou `./db` n'appartient pas à `PUID:PGID` (`sudo chown -R $(id -u):$(id -g) data db`).
-- Mise à jour : `git pull && docker compose up -d --build`.
+- Archives are in `./data`,SQLite database is in `./db` (bind mounts: directories to save).
+- Port 8000 is not encrypted : limit his acces to the reverse-proxy server's IP (firewall), or define `SAVESYNC_BIND` on LAN IP.
+- If containers stop with « Cannot write to … » : `./data` or `./db` isn't in `PUID:PGID`: 
+```bash
+(`sudo chown -R $(id -u):$(id -g) data db`).
+```
+- Update : `git pull && docker compose up -d --build`.
 
-Image multi-architecture (amd64 + arm64), test manuel :
+Multi architecture image (amd64 + arm64), test:
 
 ```bash
-docker run --privileged --rm tonistiigi/binfmt --install arm64   # une seule fois
+docker run --privileged --rm tonistiigi/binfmt --install arm64   # once
 docker buildx build --platform linux/amd64,linux/arm64 ./server
 ```
 
-La publication automatique de l'image viendra avec la CI (phase 9).
+The auto udate of the image will come with step 9.
 
 ## Tests
 
@@ -52,24 +56,24 @@ cd server && source .venv/bin/activate
 pytest
 ```
 
-## API (jeton : `Authorization: Bearer <token>`, sauf `/health`)
+## API (token : `Authorization: Bearer <token>`, exept `/health`)
 
-| Méthode | Route | Rôle |
+| Method | Route | Job |
 |---|---|---|
-| GET | `/health` | état du serveur (public) |
-| GET | `/games` | jeux et dernière version |
-| POST | `/games/{game_id}/upload` | multipart : `archive`, `sha256`, `modified_at` (ISO 8601 avec fuseau), `machine`, `steam_app_id` (optionnel) |
-| GET | `/games/{game_id}/versions` | historique, plus récent d'abord |
-| GET | `/games/{game_id}/download?version=latest\|<id>` | archive zip (en-tête `X-Content-SHA256`) |
-| DELETE | `/games/{game_id}/versions/{version_id}` | supprime une version |
+| GET | `/health` | server status (public) |
+| GET | `/games` | games and last update |
+| POST | `/games/{game_id}/upload` | multipart : `archive`, `sha256`, `modified_at` (ISO 8601 avec fuseau), `machine`, `steam_app_id` (optional) |
+| GET | `/games/{game_id}/versions` | most recent history |
+| GET | `/games/{game_id}/download?version=latest\|<id>` | zip archive (header `X-Content-SHA256`) |
+| DELETE | `/games/{game_id}/versions/{version_id}` | delete a version |
 | GET/PUT | `/settings` | `{"max_versions": n}` |
 
-## Rétention des versions
+## Hisory keeping
 
-Après chaque upload réussi, le serveur ne garde que les `max_versions` versions les plus récentes **du jeu concerné** et supprime les plus anciennes (base de données et fichiers).
+After every succesful upload, the server only keep the `max_versions` most recent versions **of the game** and delete the old ones (database and files).
 
-- La valeur se règle via `PUT /settings` (partagée par toutes les machines). `SAVESYNC_DEFAULT_MAX_VERSIONS` ne sert que tant qu'aucune valeur n'a été enregistrée.
-- Modifier la valeur ne supprime rien immédiatement : l'excédent d'un jeu est purgé lors de son prochain upload.
-- Un upload refusé (hash incorrect, zip invalide) ne supprime jamais rien, et une erreur de purge n'annule pas un upload déjà enregistré (elle est journalisée).
+- Set the value insinde `PUT /settings` (shared across every machine). `SAVESYNC_DEFAULT_MAX_VERSIONS` is only until a new value is registered.
+- Edit the value didn't delete anything imediatly: the purge is done on the next upload.
+- A refused upload (wrong hash, corupted zip) didn't delete anything, and a purge error don't cancel an upload already saved (it's loged).
 
-Les erreurs ont la forme `{"detail": {"code": "...", "message": "..."}}`.
+Errors looks like: `{"detail": {"code": "...", "message": "..."}}`.
