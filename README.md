@@ -2,8 +2,6 @@
 
 Self-hosted clone of Steam Cloud service to save your progresions in each game (serveur FastAPI + client Tauri).
 
-> État : **phase 3 — serveur FastAPI + Docker + rétention des versions**. Le client vient dans les phases suivantes.
-
 >Step 3: **FastAPI server + Docker + history**. The client is coming soon.
 
 ## Server on local host
